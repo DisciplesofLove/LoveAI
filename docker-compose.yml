@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  loveai-node:
+    image: loveai-node:latest
+    build: .
+    volumes:
+      - ./model_chunks:/app/model_chunks
+    environment:
+      - IPFS_CID=QmYourModelCID
+    ports:
+      - "5000:5000"
+    restart: always
