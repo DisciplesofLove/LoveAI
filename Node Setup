@@ -1,0 +1,69 @@
+# Love AI Compute Node Setup
+
+import os
+import subprocess
+import hashlib
+import ipfshttpclient
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Configuration
+MODEL_DIR = "./model_chunks"
+REASSEMBLED_MODEL_PATH = "./model.pth"
+IPFS_CID = "QmYourModelCID"  # Replace with actual CID
+MERKLE_ROOT = "0xYourMerkleRoot"  # Replace with actual Merkle Root
+
+# Connect to IPFS
+def fetch_from_ipfs(cid, output_path):
+    client = ipfshttpclient.connect()
+    data = client.cat(cid)
+    with open(output_path, "wb") as f:
+        f.write(data)
+    print(f"Fetched {cid} from IPFS and saved to {output_path}")
+
+# Verify Chunk Integrity
+def verify_chunk(chunk_path, expected_hash):
+    sha256 = hashlib.sha256()
+    with open(chunk_path, "rb") as f:
+        while chunk := f.read(8192):
+            sha256.update(chunk)
+    return sha256.hexdigest() == expected_hash
+
+# Reassemble Model
+def reassemble_model(metadata):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    for chunk in metadata["chunks"]:
+        cid = chunk["cid"]
+        expected_hash = chunk["hash"]
+        chunk_path = os.path.join(MODEL_DIR, chunk["chunk_id"])
+        fetch_from_ipfs(cid, chunk_path)
+        if not verify_chunk(chunk_path, expected_hash):
+            raise Exception(f"Integrity check failed for chunk {chunk['chunk_id']}")
+    print("All chunks verified. Reassembling model...")
+    with open(REASSEMBLED_MODEL_PATH, "wb") as reassembled_file:
+        for chunk in metadata["chunks"]:
+            chunk_path = os.path.join(MODEL_DIR, chunk["chunk_id"])
+            with open(chunk_path, "rb") as f:
+                reassembled_file.write(f.read())
+    print(f"Model reassembled at {REASSEMBLED_MODEL_PATH}")
+
+# Load and Run Model
+def run_inference(input_text):
+    print("Loading model...")
+    model = AutoModelForCausalLM.from_pretrained(REASSEMBLED_MODEL_PATH)
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    inputs = tokenizer(input_text, return_tensors="pt")
+    outputs = model.generate(**inputs, max_length=50)
+    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+if __name__ == "__main__":
+    print("Fetching metadata...")
+    metadata = {
+        "chunks": [
+            {"chunk_id": "chunk_001", "cid": "QmChunkCID1", "hash": "abc123..."},
+            {"chunk_id": "chunk_002", "cid": "QmChunkCID2", "hash": "def456..."},
+        ]
+    }
+    reassemble_model(metadata)
+    result = run_inference("What is decentralized AI?")
+    print(f"Model output: {result}")
