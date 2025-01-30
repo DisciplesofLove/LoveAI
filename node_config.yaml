@@ -1,0 +1,5 @@
+model_version: "loveai-v1"
+storage_backend: "IPFS"
+ipfs_gateway: "https://ipfs.io/ipfs/"
+compute_power: "medium"
+reward_token: "Joy Token"
